@@ -818,6 +818,9 @@ namespace JarvisDesktop
         [DataMember] public string AdminHash;
         [DataMember] public string AdminSalt;
         [DataMember] public bool AdminLocks;
+        // Her style (Classic, UwU or Emo), and whether they've picked one yet.
+        [DataMember] public string Style;
+        [DataMember] public bool StyleChosen;
         [DataMember] public bool NoDance;
         [DataMember] public bool NoHeadPats;
         // Off until they turn it on (Lachy, 2 Nov: "Chaos when upset can be off by default"). It replaced NoUpsetChaos, which
@@ -2693,7 +2696,8 @@ namespace JarvisDesktop
         {
             SetWanderLevel(1);
             nextWander = -1;
-            mainframe.ShowExtras();
+            if (StyleChosen) mainframe.ShowExtras();
+            else mainframe.ShowCoreFirst();
         }
 
         protected override void OnShown(EventArgs e)
@@ -13687,6 +13691,7 @@ namespace JarvisDesktop
             Preferences value = ReadPreferences(settingsPath, out notice);
             if (notice != null) unreadableNotice = notice;
             Brain.MasterMode = value != null && value.MasterMode;
+            Brain.Style = value != null && Array.IndexOf(Brain.Styles, value.Style) >= 0 ? value.Style : "Classic";
             return value;
         }
 

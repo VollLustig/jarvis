@@ -529,6 +529,22 @@ namespace JarvisDesktop
         // her personality, default or their own, and her safety lines still come after it and hold.
         internal static volatile bool MasterMode;
 
+        // Her style, picked on her first launch or in JARVIS CORE: Classic is her personality as it is, UwU and Emo sit on top of it.
+        internal static volatile string Style = "Classic";
+        internal static readonly string[] Styles = { "Classic", "UwU", "Emo" };
+
+        internal static string StyleLine(string style)
+        {
+            if (style == "UwU")
+                return "\nYour style is UwU: soft, bubbly and super cute. Now and then swap an r or l for a w (\"weally\", \"hewwo\"), and once in a while say uwu or owo out loud. " +
+                    "Get excited easily, use little words like smol, cozy and teehee, and be sweet even when you tease. Keep it wholesome: cute, never romantic or flirty.";
+            if (style == "Emo")
+                return "\nYour style is Emo: a moody emo furry girl. Dry, sarcastic and a little gloomy, into dark music, eyeliner, rainy nights and staying up too late. " +
+                    "Sometimes a small animal sound slips out, like a quiet rawr or mrrp, and you act annoyed about it. Under the eye-rolls you're secretly soft and loyal, and it shows when they need you. " +
+                    "Gloomy jokes only: never encourage real sadness or self-harm, and never romantic or flirty.";
+            return "";
+        }
+
         internal const string Master =
             "Master mode is on. Be extra playful and cute with them: bubbly, sweet and giggly, with soft teasing instead of smug teasing. " +
             "Call them Master now and then, about one reply in three, and never twice in one reply. Cheer them on like their biggest fan, get adorably excited about little things, " +
@@ -542,7 +558,7 @@ namespace JarvisDesktop
         {
             get
             {
-                string mine = Personality, yours = mine + (MasterMode ? "\n" + Master : "");
+                string mine = Personality, yours = mine + StyleLine(Style) + (MasterMode ? "\n" + Master : "");
                 return mine == DefaultPersonality ? yours + "\n" + Safety + "\n" + Machinery : yours + "\n" + Holds + "\n" + Safety + "\n" + Machinery;
             }
         }

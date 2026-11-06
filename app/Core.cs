@@ -17,6 +17,27 @@ namespace JarvisDesktop
 
         internal bool MasterMode { get { return preferences != null && preferences.MasterMode; } }
 
+        internal string Style { get { return preferences != null && Array.IndexOf(Brain.Styles, preferences.Style) >= 0 ? preferences.Style : "Classic"; } }
+
+        internal bool StyleChosen { get { return preferences != null && preferences.StyleChosen; } }
+
+        // Her style sets how she talks and, on her free voice, how she sounds: Classic is her tuned voice, UwU higher and
+        // quicker with the Bright voice, Emo lower and slower with the Sly voice and a touch of glitch.
+        internal void SetStyle(string style)
+        {
+            if (Array.IndexOf(Brain.Styles, style) < 0) style = "Classic";
+            preferences.Style = style;
+            preferences.StyleChosen = true;
+            Brain.Style = style;
+            bool freeVoice = voice.Key == null && !preferences.HdVoice && !preferences.ServerVoice;
+            if (freeVoice) ChooseVoiceStyle(style == "UwU" ? "Bright" : style == "Emo" ? "Sly" : LocalVoice.Styles[0].Name);
+            SetVoicePitch(style == "UwU" ? 5 : style == "Emo" ? -1 : 2);
+            SetVoiceSpeed(style == "UwU" ? 120 : style == "Emo" ? 100 : 120);
+            SetVoiceGlitch(style == "Emo" ? 10 : 0);
+            SavePreferences();
+            mainframe.Sync();
+        }
+
         internal void ToggleMasterMode()
         {
             preferences.MasterMode = !preferences.MasterMode;
@@ -90,6 +111,21 @@ namespace JarvisDesktop
         private CoreSheet core;
 
         // Her JARVIS CORE window, over the Mainframe like SECURITY.
+        // Her first launch: CORE opens first so they pick her style, then EXTRAS when it closes.
+        internal void ShowCoreFirst()
+        {
+            ShowCore();
+            core.Welcome();
+            core.FormClosed += delegate
+            {
+                // A new install with no brain yet gets the one-click free brain offered straight away, so there's nothing to sign
+                // up for: it downloads a model sized for this PC and runs it here.
+                if (expanded && !jarvis.SettingUp && MessageBox.Show(this, "Set up Jarvis's free brain now?\n\nIt downloads a free AI made for your PC (a few GB) and runs it right here. No account or key needed. You can switch to a smarter cloud brain later under BRAIN.", "Jarvis", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                    jarvis.SetUpBrain();
+                ShowExtras();
+            };
+        }
+
         internal void ShowCore()
         {
             if (core != null && !core.IsDisposed && core.Zoom != zoom) core.Close();
@@ -114,7 +150,9 @@ namespace JarvisDesktop
         {
             private readonly Mainframe owner;
             internal readonly float Zoom;
-            private const int Tall = 560;
+            private const int Tall = 680;
+            private readonly Key[] styles = new Key[3];
+            private readonly Label styleNote;
             private bool syncing;
             private readonly Toggle master;
             private readonly Toggle locks;
@@ -159,28 +197,42 @@ namespace JarvisDesktop
                 Caption("OWNED AND RUN BY", 44, 60, small, Faint, Deep);
                 Caption(Companion.Owner, 44, 76, Display(17f * zoom), Cyan, Deep);
 
-                Heading(this, "MASTER MODE >", new Point(Z(28), Z(130)), head, White, Wide - 28);
+                Heading(this, "HER STYLE >", new Point(Z(28), Z(130)), head, White, Wide - 28);
+                for (int i = 0; i < Brain.Styles.Length; i++)
+                {
+                    string style = Brain.Styles[i];
+                    Key pick = new Key();
+                    pick.Text = style;
+                    pick.Font = Type(9.5f * zoom, true);
+                    pick.Bounds = Box(28 + i * 112, 156, 100, 28);
+                    pick.AccessibleName = "Her style: " + style;
+                    pick.Click += delegate { owner.jarvis.SetStyle(style); Sync(); };
+                    Controls.Add(pick);
+                    styles[i] = pick;
+                }
+                styleNote = Caption("", 28, 192, small, Faint, Ground, Wide - 56);
+                Heading(this, "MASTER MODE >", new Point(Z(28), Z(222)), head, White, Wide - 28);
                 master = new Toggle();
                 master.Text = "Master mode";
                 master.Font = Font;
                 master.Switch = 96;
-                master.Bounds = Box(28, 156, Wide - 56, 22);
+                master.Bounds = Box(28, 248, Wide - 56, 22);
                 master.AccessibleName = "Master mode. She turns extra playful and cute, and calls you Master";
                 master.CheckedChanged += delegate { if (!syncing) owner.jarvis.ToggleMasterMode(); };
                 Controls.Add(master);
-                Caption("She turns extra playful and cute, cheers you on and calls you Master. Her safety lines still hold.", 28, 182, small, Faint, Ground, Wide - 56);
+                Caption("She turns extra playful and cute, cheers you on and calls you Master. Her safety lines still hold.", 28, 274, small, Faint, Ground, Wide - 56);
 
-                Heading(this, "ADMIN >", new Point(Z(28), Z(240)), head, White, Wide - 28);
-                status = Caption("", 28, 266, Type(9.5f * zoom, true), Neon.Amber, Ground, Wide - 56);
+                Heading(this, "ADMIN >", new Point(Z(28), Z(332)), head, White, Wide - 28);
+                status = Caption("", 28, 358, Type(9.5f * zoom, true), Neon.Amber, Ground, Wide - 56);
                 password = new Entry();
-                password.Bounds = Box(28, 292, Wide - 56, 26);
+                password.Bounds = Box(28, 384, Wide - 56, 26);
                 password.Box.UseSystemPasswordChar = true;
                 password.Box.Font = Font;
                 password.AccessibleName = "Admin password";
                 password.Box.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Act(); } };
                 Controls.Add(password);
                 again = new Entry();
-                again.Bounds = Box(28, 326, Wide - 56, 26);
+                again.Bounds = Box(28, 418, Wide - 56, 26);
                 again.Box.UseSystemPasswordChar = true;
                 again.Box.Font = Font;
                 again.AccessibleName = "Admin password again";
@@ -190,29 +242,29 @@ namespace JarvisDesktop
                 act.Font = Type(9f * zoom, true);
                 act.Accent = Cyan;
                 act.Loud = true;
-                act.Bounds = Box(28, 362, 150, 26);
+                act.Bounds = Box(28, 454, 150, 26);
                 act.Click += delegate { Act(); };
                 Controls.Add(act);
                 lockNow = new Key();
                 lockNow.Text = "Lock admin";
                 lockNow.Font = Type(9f * zoom, true);
-                lockNow.Bounds = Box(186, 362, Wide - 214, 26);
+                lockNow.Bounds = Box(186, 454, Wide - 214, 26);
                 lockNow.Click += delegate { owner.jarvis.LockAdmin(); Sync(); };
                 Controls.Add(lockNow);
                 locks = new Toggle();
                 locks.Text = "Lock Settings and Mods";
                 locks.Font = Font;
                 locks.Switch = 96;
-                locks.Bounds = Box(28, 404, Wide - 56, 22);
+                locks.Bounds = Box(28, 496, Wide - 56, 22);
                 locks.AccessibleName = "Lock Settings and Mods. They ask for the admin password before they open";
                 locks.CheckedChanged += delegate { if (!syncing) { owner.jarvis.ToggleSettingsLock(); Sync(); } };
                 Controls.Add(locks);
-                lockNote = Caption("Settings and Mods ask for the admin password before they open.", 28, 430, small, Faint, Ground, Wide - 56);
+                lockNote = Caption("Settings and Mods ask for the admin password before they open.", 28, 522, small, Faint, Ground, Wide - 56);
                 forget = new Key();
                 forget.Text = "Remove password";
                 forget.Font = Type(9f * zoom, true);
                 forget.Accent = Hot;
-                forget.Bounds = Box(28, 458, 150, 24);
+                forget.Bounds = Box(28, 550, 150, 24);
                 forget.Click += delegate
                 {
                     if (MessageBox.Show(this, "Remove the admin password? Settings and Mods unlock for everyone on this PC.", "Jarvis Core", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
@@ -220,7 +272,7 @@ namespace JarvisDesktop
                     Sync();
                 };
                 Controls.Add(forget);
-                passwordNote = Caption("A lock for this PC, not encryption: anyone who can edit her settings file can reset it.", 28, 494, small, Faint, Ground, Wide - 56);
+                passwordNote = Caption("A lock for this PC, not encryption: anyone who can edit her settings file can reset it.", 28, 586, small, Faint, Ground, Wide - 56);
 
                 Key done = new Key();
                 done.Text = "Done";
@@ -259,11 +311,23 @@ namespace JarvisDesktop
 
             private void Say(string line) { status.Text = line; }
 
+            // On her first launch: the style row asks to be picked.
+            internal void Welcome() { styleNote.Text = "Pick how she talks and sounds. You can change it here any time."; styleNote.ForeColor = Neon.Amber; }
+
             internal void Sync()
             {
                 syncing = true;
                 Companion jarvis = owner.jarvis;
                 master.Checked = jarvis.MasterMode;
+                string style = jarvis.Style;
+                for (int i = 0; i < styles.Length; i++)
+                {
+                    styles[i].Accent = Brain.Styles[i] == style ? Cyan : Rose;
+                    styles[i].Loud = Brain.Styles[i] == style;
+                    styles[i].Invalidate();
+                }
+                styleNote.ForeColor = Faint;
+                styleNote.Text = style == "UwU" ? "UwU: soft, bubbly and super cute, with a higher, quicker voice." : style == "Emo" ? "Emo: a moody emo furry girl, dry and gloomy but secretly soft, with a lower voice." : "Classic: her normal self.";
                 bool has = jarvis.HasAdminPassword, open = jarvis.AdminUnlocked;
                 bool typing = !has || !open || changing;
                 status.Text = !has ? "No admin password yet. Set one to lock her settings." : !open ? "Admin is locked." : changing ? "Type the new password twice." : "Admin is unlocked.";
@@ -272,7 +336,7 @@ namespace JarvisDesktop
                 password.Cue = !has || changing ? "New password" : "Password";
                 again.Cue = "Same password again";
                 act.Text = !has ? "Set password" : !open ? "Unlock" : changing ? "Save password" : "Change password";
-                act.Top = Z(again.Visible ? 362 : typing ? 328 : 292);
+                act.Top = Z(again.Visible ? 454 : typing ? 420 : 384);
                 lockNow.Top = act.Top;
                 lockNow.Visible = has && open && !changing;
                 locks.Visible = lockNote.Visible = forget.Visible = has && open && !changing;
