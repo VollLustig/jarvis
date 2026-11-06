@@ -54,6 +54,9 @@ She sits on your windows, talks back, joins your calls, plays your games and get
 - **Hears you better.** Quiet and far-off mics are levelled up before her ears get them, lines get a little padding so first and last words aren't clipped, and "Listen for Jarvis" also catches common mishearings like Jarvas, Jervis, Javis, Jarwis and Dschawis
 - **New look.** A Jarvis colour theme (arc blue and gold on navy, with a faint HUD grid), her name and an OWNER // VOLLLUSTIG tag in the Mainframe's title bar. Night City is still under Settings > Mainframe colours
 - **JARVIS CORE.** The new Core button in her title bar holds **Master mode** (she turns extra playful and cute and calls you Master) and **Admin**: set a password, then lock Settings and Mods behind it
+- **"Hey Jarvis" wakes her.** Her always-on wake word listens for Hey, OK, Okay and Hi Jarvis (and blurred Jervis/Jarves), and quiet mics are boosted before it listens
+- **Her style.** On first launch she asks you to pick Classic, UwU (cute and bubbly, higher voice) or Emo (a moody emo furry girl, lower voice). Change it any time in Core
+- **Free brain in one click.** On first launch she offers to download a free brain that runs on your PC: no account or key needed
 - **No auto-updates.** Capri's own releases would install over Jarvis, so the update check is off in this build
 
 ## 0.8.3: the HUGE update

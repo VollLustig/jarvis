@@ -2851,13 +2851,14 @@ namespace JarvisDesktop
         private const string Inside = "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01";
         private const string Encoder = "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx", Decoder = "decoder-epoch-12-avg-2-chunk-16-left-64.onnx", Joiner = "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx";
         internal static readonly string[] Needed = { Encoder, Decoder, Joiner, "tokens.txt" };
-        // HEY JARVIS in the model's BPE pieces, from its own bpe.model. The boost and threshold were tuned on 918 clips of her
-        // four free voices and Windows' two, clean, under noise and from across the room: about 97% of clean and quiet
-        // "Hey Jarvis"s and 72% under noise fired, and none of 594 other lines or 10 minutes of talk did. A boost of 3 fired
-        // on "a caprese salad".
-        internal static string[] Phrases = { "▁HE Y ▁CA P RI" };
-        internal static float Boost = 2f;
-        internal static float Threshold = 0.1f;
+        // "Hey Jarvis" and the ways people say it, in the model's BPE pieces from its own bpe.model: Hey, OK, Okay and Hi
+        // Jarvis, and Hey Jervis and Hey Jarves for the vowels people blur. On 120 synthetic "Hey Jarvis" clips the extra
+        // phrases took it from 18% to 29% heard (real voices fire far more than espeak's), with none of 450 other lines
+        // ("hey Travis", "harvest", "service", "Jarvis Cocker") firing at any setting tried. A slightly higher boost and
+        // lower threshold than Capri's added a few more, still with no false fires.
+        internal static string[] Phrases = { "▁HE Y ▁JA R VI S", "▁O K ▁JA R VI S", "▁OKAY ▁JA R VI S", "▁HI ▁JA R VI S", "▁HE Y ▁JE R VI S", "▁HE Y ▁JA R VE S" };
+        internal static float Boost = 2.5f;
+        internal static float Threshold = 0.08f;
         private readonly string root;
         private readonly string engine;
         private readonly object gate = new object();
