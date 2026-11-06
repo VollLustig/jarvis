@@ -1,0 +1,179 @@
+name: Mac and Linux
+
+on:
+  push:
+    branches: [mac-linux]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      CAN_NOTARIZE: ${{ secrets.MAC_CERT_P12 != '' && secrets.APPLE_APP_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: |
+          set -e
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' cross/Jarvis.Cross.csproj)
+          mkdir -p Jarvis.iconset
+          for s in 16 32 128 256 512; do
+            sips -z $s $s cross/icon.png --out Jarvis.iconset/icon_${s}x${s}.png >/dev/null
+            d=$((s * 2))
+            sips -z $d $d cross/icon.png --out Jarvis.iconset/icon_${s}x${s}@2x.png >/dev/null
+          done
+          iconutil -c icns Jarvis.iconset -o Jarvis.icns
+          for arch in arm64 x64; do
+            dotnet publish cross/Jarvis.Cross.csproj -c Release -r osx-$arch --self-contained -o out/$arch -p:DebugType=none
+            app=dist/$arch/Jarvis.app
+            mkdir -p $app/Contents/MacOS $app/Contents/Resources
+            cp -R out/$arch/. $app/Contents/MacOS/
+            sed "s/@VERSION@/$version/g" cross/mac/Info.plist > $app/Contents/Info.plist
+            cp Jarvis.icns $app/Contents/Resources/Jarvis.icns
+            codesign --force --deep --sign - $app
+          done
+      - name: Sign and notarize
+        if: env.CAN_NOTARIZE == 'true'
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -e
+          keychain=$RUNNER_TEMP/jarvis.keychain-db
+          pass=$(uuidgen)
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          echo "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -m1 "Developer ID Application" | sed 's/.*"\(.*\)"/\1/')
+          test -n "$identity"
+          for arch in arm64 x64; do
+            app=dist/$arch/Jarvis.app
+            find $app/Contents/MacOS -type f ! -name Jarvis | while read -r part; do
+              if file -b "$part" | grep -q Mach-O; then codesign --force --timestamp --options runtime --sign "$identity" "$part"; fi
+            done
+            codesign --force --timestamp --options runtime --entitlements cross/mac/Jarvis.entitlements --sign "$identity" $app/Contents/MacOS/Jarvis
+            codesign --force --timestamp --options runtime --entitlements cross/mac/Jarvis.entitlements --sign "$identity" $app
+            codesign --verify --strict --verbose=2 $app
+            ditto -c -k --keepParent $app $RUNNER_TEMP/notarize-$arch.zip
+            xcrun notarytool submit $RUNNER_TEMP/notarize-$arch.zip --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait --timeout 20m
+            xcrun stapler staple $app
+            spctl --assess --type execute --verbose $app
+          done
+          touch dist/notarized
+          security delete-keychain "$keychain"
+      - name: Smoke test, Apple Silicon
+        timeout-minutes: 5
+        run: |
+          dist/arm64/Jarvis.app/Contents/MacOS/Jarvis --smoke "$PWD/smoke/mac-arm64" || true
+          cat smoke/mac-arm64/smoke-test.txt
+          if grep -q '^FAIL' smoke/mac-arm64/smoke-test.txt; then exit 1; fi
+      - name: Smoke test, Intel through Rosetta
+        timeout-minutes: 5
+        run: |
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 dist/x64/Jarvis.app/Contents/MacOS/Jarvis --smoke "$PWD/smoke/mac-x64" || true
+            cat smoke/mac-x64/smoke-test.txt
+            if grep -q '^FAIL' smoke/mac-x64/smoke-test.txt; then exit 1; fi
+          else
+            echo "No Rosetta on this runner"
+          fi
+      - name: Zip
+        run: |
+          for arch in arm64 x64; do
+            if [ ! -f dist/notarized ]; then cp cross/mac/If-Jarvis-wont-open.txt "dist/$arch/If Jarvis won't open.txt"; fi
+          done
+          (cd dist/arm64 && ditto -c -k . ../../Jarvis-mac-apple-silicon.zip)
+          (cd dist/x64 && ditto -c -k . ../../Jarvis-mac-intel.zip)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: |
+            Jarvis-mac-apple-silicon.zip
+            Jarvis-mac-intel.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-mac
+          path: smoke
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: |
+          dotnet publish cross/Jarvis.Cross.csproj -c Release -r linux-x64 --self-contained -o out/Jarvis -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none
+          chmod +x out/Jarvis/Jarvis
+      - name: Install a test desktop
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends xvfb xauth openbox xcompmgr libice6 libsm6 libfontconfig1
+      - name: Smoke test
+        timeout-minutes: 5
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" bash -c 'openbox & sleep 2; xcompmgr & sleep 1; out/Jarvis/Jarvis --smoke "$PWD/smoke/linux"' || true
+          cat smoke/linux/smoke-test.txt
+          if grep -q '^FAIL' smoke/linux/smoke-test.txt; then exit 1; fi
+      - name: Pack
+        run: tar -czf Jarvis-linux-x64.tar.gz -C out Jarvis
+      # The AppImage wraps the same Jarvis the tarball has, and goes in the linux artifact beside it, so a release puts both
+      # in SHA256SUMS.txt and uploads them together. appimagetool would fetch the newest AppImage runtime at build time,
+      # and that runtime is the first code that runs on their PC, so the tool and the runtime are both pinned by sha256.
+      - name: Pack the AppImage
+        run: |
+          set -e
+          mkdir -p AppDir/usr/bin
+          cp -a out/Jarvis/. AppDir/usr/bin/
+          cp cross/linux/jarvis-desktop.desktop AppDir/jarvis-desktop.desktop
+          cp cross/icon.png AppDir/jarvis-desktop.png
+          printf '%s\n' '#!/bin/sh' 'HERE="$(dirname "$(readlink -f "$0")")"' 'exec "${APPDIR:-$HERE}/usr/bin/Jarvis" "$@"' > AppDir/AppRun
+          chmod +x AppDir/AppRun
+          curl -fsSLo appimagetool https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl -fsSLo runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool" | sha256sum -c -
+          echo "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  runtime-x86_64" | sha256sum -c -
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run --runtime-file runtime-x86_64 AppDir Jarvis-linux-x64.AppImage
+          sha256sum Jarvis-linux-x64.tar.gz Jarvis-linux-x64.AppImage | tee -a "$GITHUB_STEP_SUMMARY"
+      # The runner has no FUSE, so the image runs through its extract-and-run mode, which still sets APPIMAGE and APPDIR.
+      - name: Smoke test the AppImage
+        timeout-minutes: 10
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" bash -c 'openbox & sleep 2; xcompmgr & sleep 1; ./Jarvis-linux-x64.AppImage --appimage-extract-and-run --smoke "$PWD/smoke/appimage"' || true
+          cat smoke/appimage/smoke-test.txt
+          if grep -q '^FAIL' smoke/appimage/smoke-test.txt; then exit 1; fi
+          test "$(grep -c '^PASS' smoke/appimage/smoke-test.txt)" -ge 20
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            Jarvis-linux-x64.tar.gz
+            Jarvis-linux-x64.AppImage
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-linux
+          path: smoke

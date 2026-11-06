@@ -1,0 +1,36 @@
+// capri-mod: 1
+// id: hello-code
+// name: Hello Code
+// version: 1.0.0
+// author: Avery
+// description: Answers "mod check" and counts how often you've asked.
+
+using System;
+using System.IO;
+using JarvisDesktop;
+
+public class HelloCode : IJarvisMod
+{
+    private IJarvisHost jarvis;
+    private string counter;
+
+    public void Start(IJarvisHost host)
+    {
+        jarvis = host;
+        counter = Path.Combine(host.Folder, "count.txt");
+        jarvis.Log("Hello Code started.");
+    }
+
+    public bool Heard(string words)
+    {
+        if (words.IndexOf("mod check", StringComparison.OrdinalIgnoreCase) < 0) return false;
+        int count = 0;
+        if (File.Exists(counter)) int.TryParse(File.ReadAllText(counter), out count);
+        count++;
+        File.WriteAllText(counter, count.ToString());
+        jarvis.Say("Code mod online. That's check number " + count + ".");
+        return true;
+    }
+
+    public void Stop() { jarvis.Log("Hello Code stopped."); }
+}

@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches-ignore: [gh-pages]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - name: Full size screen
+        shell: powershell
+        run: ./ci/wide-screen.ps1
+      - name: Build and smoke test
+        shell: pwsh
+        run: ./ci/build-windows.ps1 -OutputDirectory out/windows -SmokeTest -SmokeSeconds 900
+      - name: Package marker
+        if: always()
+        shell: pwsh
+        run: |
+          $env:JARVIS_DISPOSABLE_USER = '1'
+          ./ci/test-package-marker.ps1 -Setup out/windows/Jarvis-Setup.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-windows
+          path: out/windows/smoke
+      # The files the smoke test ran, so a release can ship exactly those.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows
+          path: |
+            out/windows/Jarvis.exe
+            out/windows/Jarvis-Setup.exe
+          if-no-files-found: warn
+
+  # Her silent install and uninstall change the runner's own Jarvis, so they get a fresh runner of their own.
+  windows-setup:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        shell: pwsh
+        run: ./ci/build-windows.ps1 -OutputDirectory out/windows
+      - name: Silent install and uninstall
+        shell: pwsh
+        run: |
+          $env:JARVIS_DISPOSABLE_USER = '1'
+          ./ci/test-silent-install.ps1 -Setup out/windows/Jarvis-Setup.exe
+          ./ci/test-silent-uninstall.ps1 -Setup out/windows/Jarvis-Setup.exe
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: dotnet build cross/Jarvis.Cross.csproj -c Release -o out/linux
+      - name: Install a test desktop
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends xvfb xauth openbox xcompmgr libice6 libsm6 libfontconfig1
+      - name: Smoke test
+        timeout-minutes: 5
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" bash -c 'openbox & sleep 2; xcompmgr & sleep 1; out/linux/Jarvis --smoke "$PWD/smoke/linux"' || true
+          cat smoke/linux/smoke-test.txt
+          if grep -q '^FAIL' smoke/linux/smoke-test.txt; then exit 1; fi
+          test "$(grep -c '^PASS' smoke/linux/smoke-test.txt)" -ge 20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-linux
+          path: smoke
+
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: dotnet build cross/Jarvis.Cross.csproj -c Release -o out/mac
+      - name: Smoke test
+        timeout-minutes: 5
+        run: |
+          out/mac/Jarvis --smoke "$PWD/smoke/mac" || true
+          cat smoke/mac/smoke-test.txt
+          if grep -q '^FAIL' smoke/mac/smoke-test.txt; then exit 1; fi
+          test "$(grep -c '^PASS' smoke/mac/smoke-test.txt)" -ge 20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-mac
+          path: smoke

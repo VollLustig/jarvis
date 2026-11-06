@@ -1,0 +1,12 @@
+{
+  "name": "jarvis-discord-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node jarvis-bot.mjs",
+    "test": "node --test lib.test.mjs"
+  },
+  "dependencies": {
+    "discord.js": "^14.0.0"
+  }
+}

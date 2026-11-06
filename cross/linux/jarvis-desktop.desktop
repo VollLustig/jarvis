@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Jarvis
+GenericName=Desktop Companion
+Comment=Unofficial Jarvis companion for your desktop
+Exec=Jarvis
+Icon=jarvis-desktop
+Terminal=false
+Categories=Utility;
+Keywords=jarvis;companion;desktop;
+StartupWMClass=Jarvis

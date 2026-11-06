@@ -1,0 +1,15 @@
+If macOS won't open Jarvis
+
+This Mac build isn't notarized by Apple yet, so macOS blocks it the first time.
+
+1. Drag Jarvis into your Applications folder.
+2. Open Terminal (press Cmd + Space, type Terminal, press Return).
+3. Paste this line and press Return:
+
+   xattr -dr com.apple.quarantine /Applications/Jarvis.app
+
+4. Open Jarvis again.
+
+That line only removes the "downloaded from the internet" flag from Jarvis. Nothing else on your Mac changes.
+
+If you'd rather not use Terminal: try to open Jarvis once, then go to System Settings > Privacy & Security, scroll down and click Open Anyway. If macOS says Jarvis "is damaged", that button won't appear, so use the Terminal line above.
